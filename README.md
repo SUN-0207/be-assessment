@@ -4,15 +4,28 @@ Ingests financial transactions, computes per-account balances in USD, and serves
 requested currency. Ingestion and reads run as **separate processes** sharing only PostgreSQL.
 
 ## Requirements
-- Python 3.11+
+- Python 3.11+ (on Windows, use the `py` launcher if `python` is not on PATH)
 - Docker (for local PostgreSQL)
 
 ## Setup
 ```bash
+# 1. Start PostgreSQL
 cp .env.example .env
-docker compose up -d            # start PostgreSQL on localhost:5432
+docker compose up -d                 # PostgreSQL on localhost:5432
+
+# 2. Create and activate a virtual environment
+python -m venv .venv                 # Windows: if 'python' is missing, run  py -m venv .venv
+source .venv/bin/activate            # Windows (PowerShell):  .venv\Scripts\Activate.ps1
+                                     # Windows (Git Bash):    source .venv/Scripts/activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
 ```
+
+> All `python` / `pytest` / `uvicorn` commands below assume this virtual environment is
+> **activated**. If you'd rather not activate it, call the venv binaries directly instead, e.g.
+> `.venv/bin/python -m ledger.ingest ...` (Linux/macOS) or
+> `.venv\Scripts\python -m ledger.ingest ...` (Windows).
 
 ### Port conflicts
 
