@@ -1,0 +1,504 @@
+<title>Ledger Balance Aggregation — Architecture & Flow</title>
+<meta name="description" content="Two-process ledger service: concurrent batched ingestion into PostgreSQL and a separate read server, with live-verified results." />
+<style>
+  :root {
+    --paper: #eceff4;
+    --surface: #ffffff;
+    --surface-2: #f5f7fa;
+    --ink: #0f1a26;
+    --muted: #5c6b7a;
+    --faint: #8896a4;
+    --hair: #d6dde5;
+    --hair-strong: #c2cdd8;
+    --pg: #1f4e8c;        /* persistence / structure */
+    --pg-soft: #e7eef7;
+    --amber: #a85d22;     /* ingest / compute path */
+    --amber-soft: #f6ebdf;
+    --credit: #167a55;    /* positive money */
+    --debit: #bb3a30;     /* negative money */
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --maxw: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body { margin: 0; }
+
+  .page {
+    background:
+      radial-gradient(120% 90% at 50% -10%, #f4f7fb 0%, var(--paper) 60%) fixed;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: 0 20px 80px;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; }
+
+  /* ---- typography ---- */
+  h1, h2, h3 { text-wrap: balance; line-height: 1.12; margin: 0; font-weight: 700; letter-spacing: -0.015em; }
+  h1 { font-size: clamp(2rem, 5.2vw, 3.3rem); }
+  h2 { font-size: clamp(1.4rem, 3.4vw, 1.9rem); }
+  h3 { font-size: 1.05rem; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  .lede { font-size: clamp(1.05rem, 2.2vw, 1.25rem); color: #33424f; max-width: 60ch; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--amber);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 22px; height: 2px;
+    background: var(--amber);
+    display: inline-block;
+  }
+
+  .mono { font-family: var(--mono); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---- header ---- */
+  header.hero {
+    padding: clamp(48px, 9vw, 104px) 0 40px;
+    border-bottom: 1px solid var(--hair);
+  }
+  .hero .eyebrow { margin-bottom: 22px; }
+  .hero h1 { margin-bottom: 18px; }
+  .hero .lede { margin-bottom: 36px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: 1px;
+    background: var(--hair);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .stat { background: var(--surface); padding: 16px 18px; }
+  .stat .v { font-family: var(--mono); font-size: 1.45rem; font-weight: 600; letter-spacing: -0.02em; }
+  .stat .k { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .stat.good .v { color: var(--credit); }
+
+  /* ---- sections ---- */
+  section { padding: clamp(44px, 7vw, 72px) 0; border-bottom: 1px solid var(--hair); }
+  .sec-head { margin-bottom: 30px; }
+  .sec-head .eyebrow { margin-bottom: 14px; }
+  .sec-head p { color: var(--muted); max-width: 62ch; margin-top: 10px; }
+
+  /* ---- architecture schematic ---- */
+  .scroll { overflow-x: auto; padding-bottom: 6px; }
+  .arch {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-width: 760px;
+    margin: 6px 0 8px;
+  }
+  .node {
+    background: var(--surface);
+    border: 1px solid var(--hair-strong);
+    border-radius: 14px;
+    padding: 20px;
+    flex: 1 1 0;
+    display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 1px 0 rgba(15,26,38,0.04), 0 12px 28px -22px rgba(15,26,38,0.4);
+  }
+  .node.proc { border-top: 3px solid var(--amber); }
+  .node.store { border-top: 3px solid var(--pg); background: linear-gradient(180deg, var(--pg-soft), var(--surface) 60%); }
+  .node .role { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  .node h3 { font-size: 1.15rem; }
+  .node ul { margin: 4px 0 0; padding-left: 1.05em; color: var(--muted); font-size: 0.9rem; }
+  .node li { margin: 3px 0; }
+  .node li code { font-family: var(--mono); font-size: 0.82em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; color: #34424f; }
+
+  .pill { align-self: flex-start; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  .pill.exit { background: #fbe9e7; color: var(--debit); }
+  .pill.live { background: #e4f3ec; color: var(--credit); }
+  .pill.pg { background: #e2ebf6; color: var(--pg); }
+
+  .link {
+    flex: 0 0 96px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; position: relative; padding: 0 6px;
+  }
+  .link .lbl { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); text-align: center; }
+  .link svg { width: 100%; height: 22px; display: block; }
+  .link .dir { color: var(--pg); }
+  .link .dir.write { color: var(--amber); }
+
+  .barrier-note {
+    margin-top: 16px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 0.86rem; color: var(--muted);
+    background: var(--surface-2);
+    border: 1px dashed var(--hair-strong);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .barrier-note b { color: var(--ink); font-weight: 600; }
+
+  /* ---- pipeline ---- */
+  .pipe { display: grid; gap: 0; }
+  .step {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 18px;
+    padding: 18px 0;
+    border-top: 1px solid var(--hair);
+  }
+  .step:first-child { border-top: none; }
+  .step .idx {
+    font-family: var(--mono); font-weight: 600; font-size: 1rem;
+    color: var(--pg);
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--pg-soft); border: 1px solid #d3e0f0;
+  }
+  .step.compute .idx { color: var(--amber); background: var(--amber-soft); border-color: #ead8c6; }
+  .step .body h3 { margin-bottom: 4px; }
+  .step .body p { color: var(--muted); font-size: 0.92rem; }
+  .step .body code { font-family: var(--mono); font-size: 0.84em; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; color: #34424f; }
+  .tag { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+
+  /* ---- code block ---- */
+  pre {
+    margin: 0; background: #0f1a26; color: #d8e2ec;
+    border-radius: 12px; padding: 18px 20px; overflow-x: auto;
+    font-family: var(--mono); font-size: 0.85rem; line-height: 1.65;
+    border: 1px solid #1d2b3a;
+  }
+  pre .kw { color: #7fb0e8; }
+  pre .fn { color: #e0a96d; }
+  pre .lit { color: #88c9a1; }
+  pre .cm { color: #6b7c8c; font-style: italic; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 18px; }
+  .card .h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .card .n { font-family: var(--mono); font-size: 0.78rem; color: var(--amber); font-weight: 600; }
+  .card h3 { font-size: 0.98rem; }
+  .card p { font-size: 0.88rem; color: var(--muted); margin-top: 4px; }
+
+  /* ---- currency ---- */
+  .conv { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .formula {
+    background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 22px;
+    border-left: 4px solid var(--pg);
+  }
+  .formula.ingest { border-left-color: var(--amber); }
+  .formula .role { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  .formula .eq { font-family: var(--mono); font-size: 1.02rem; margin: 12px 0; line-height: 1.7; color: var(--ink); }
+  .formula .eq b { color: var(--pg); }
+  .formula.ingest .eq b { color: var(--amber); }
+  .formula .ex { font-size: 0.85rem; color: var(--muted); }
+  .formula .ex .num { color: var(--ink); }
+
+  /* ---- results table ---- */
+  table { border-collapse: collapse; width: 100%; min-width: 540px; font-size: 0.9rem; }
+  caption { text-align: left; color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; }
+  th, td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--hair); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--hair-strong); }
+  tbody td.mono, tbody td .mono { font-family: var(--mono); }
+  td.served, td.ref { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.pos { color: var(--credit); }
+  td.neg { color: var(--debit); }
+  .ok { font-family: var(--mono); font-size: 0.74rem; font-weight: 600; color: var(--credit); }
+  .ok::before { content: "✓ "; }
+  tr.total td { border-top: 2px solid var(--hair-strong); font-weight: 600; }
+  tr.total td:first-child { font-weight: 600; }
+  .verdict {
+    margin-top: 20px; display: inline-flex; align-items: center; gap: 10px;
+    background: #e4f3ec; color: var(--credit); border: 1px solid #b9e0cb;
+    padding: 12px 18px; border-radius: 10px; font-family: var(--mono); font-size: 0.9rem; font-weight: 600;
+  }
+
+  .perf { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-top: 22px; }
+  .perf .p { background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 16px; }
+  .perf .p .v { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; }
+  .perf .p .k { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+
+  /* ---- callout ---- */
+  .callout {
+    background: linear-gradient(180deg, #fbf3eb, var(--surface) 70%);
+    border: 1px solid #ecd8c4; border-left: 4px solid var(--amber);
+    border-radius: 12px; padding: 18px 20px; margin-top: 24px;
+  }
+  .callout .role { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
+  .callout p { font-size: 0.92rem; color: #4a4034; margin-top: 6px; }
+  .callout code { font-family: var(--mono); font-size: 0.85em; background: #fff; border: 1px solid #ecd8c4; padding: 1px 5px; border-radius: 5px; }
+
+  footer { padding: 44px 0 0; color: var(--muted); font-size: 0.85rem; }
+  footer .stack { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  footer .chip { font-family: var(--mono); font-size: 0.74rem; background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 5px 12px; color: #3a4753; }
+
+  /* ---- motion ---- */
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise 0.6s cubic-bezier(.2,.7,.3,1) both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  }
+  a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--pg); outline-offset: 3px; border-radius: 4px; }
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <header class="hero reveal">
+      <span class="eyebrow">Backend Assessment · Python + PostgreSQL</span>
+      <h1>Ledger Balance Aggregation</h1>
+      <p class="lede">A two-process service: one run ingests 50,000 financial transactions into PostgreSQL with concurrency-safe accumulation, then exits; a separate read server serves per-account and total balances in any currency — reading only from the database.</p>
+      <div class="stats" role="list">
+        <div class="stat" role="listitem"><div class="v num">50,000</div><div class="k">transactions</div></div>
+        <div class="stat" role="listitem"><div class="v num">1.15s</div><div class="k">ingest time</div></div>
+        <div class="stat" role="listitem"><div class="v num">900</div><div class="k">accounts</div></div>
+        <div class="stat" role="listitem"><div class="v num">5</div><div class="k">currencies</div></div>
+        <div class="stat good" role="listitem"><div class="v num">20/20</div><div class="k">tests green</div></div>
+        <div class="stat good" role="listitem"><div class="v">served = ref</div><div class="k">cross-checked</div></div>
+      </div>
+    </header>
+
+    <!-- ARCHITECTURE -->
+    <section>
+      <div class="sec-head">
+        <span class="eyebrow">System</span>
+        <h2>Two processes, one channel</h2>
+        <p>The ingest process and the read server never share memory. PostgreSQL is the only thing between them — so both the balances and the exchange rates needed for read-side conversion are persisted. The read server is proven correct after the ingest process has fully exited.</p>
+      </div>
+
+      <div class="scroll">
+        <div class="arch">
+          <div class="node proc">
+            <span class="role">Process A · batch</span>
+            <h3>Ingest</h3>
+            <span class="pill exit">runs then exits</span>
+            <ul>
+              <li>reads <code>transactions.csv</code> + <code>rates.csv</code></li>
+              <li>converts each row to USD</li>
+              <li>concurrent atomic upserts</li>
+            </ul>
+          </div>
+
+          <div class="link" aria-hidden="true">
+            <span class="lbl">writes<br>balances + rates</span>
+            <svg viewBox="0 0 90 22" fill="none"><path d="M2 11 H78" stroke="currentColor" class="dir write" stroke-width="2"/><path d="M74 5 L84 11 L74 17" stroke="currentColor" class="dir write" stroke-width="2" fill="none"/></svg>
+          </div>
+
+          <div class="node store">
+            <span class="role">Source of truth</span>
+            <h3>PostgreSQL 16</h3>
+            <span class="pill pg">NUMERIC(38,10)</span>
+            <ul>
+              <li><code>balances</code> — one row / id</li>
+              <li><code>exchange_rates</code> — (date, ccy)</li>
+            </ul>
+          </div>
+
+          <div class="link" aria-hidden="true">
+            <span class="lbl">reads<br>only from DB</span>
+            <svg viewBox="0 0 90 22" fill="none"><path d="M2 11 H78" stroke="currentColor" class="dir" stroke-width="2"/><path d="M74 5 L84 11 L74 17" stroke="currentColor" class="dir" stroke-width="2" fill="none"/></svg>
+          </div>
+
+          <div class="node proc" style="border-top-color: var(--pg);">
+            <span class="role">Process B · server</span>
+            <h3>Read server</h3>
+            <span class="pill live">separate run</span>
+            <ul>
+              <li><code>GET /balance/{id}</code></li>
+              <li><code>GET /total</code></li>
+              <li>FastAPI · own pool</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="barrier-note">
+        <span class="mono" aria-hidden="true" style="color:var(--debit); font-weight:700;">⊘</span>
+        <span><b>No shared in-memory state.</b> Restart isolation is proven in the test suite: ingestion runs as a subprocess that exits, then the server is started fresh and asserted against an independent reference.</span>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section>
+      <div class="sec-head">
+        <span class="eyebrow">Pipeline</span>
+        <h2>The full flow, end to end</h2>
+        <p>A single deterministic sequence — amber steps compute, blue steps persist or serve.</p>
+      </div>
+
+      <div class="pipe">
+        <div class="step compute">
+          <div class="idx num">1</div>
+          <div class="body">
+            <span class="tag">generate · seeded</span>
+            <h3>Synthesize input</h3>
+            <p>A seeded generator writes <code>transactions.csv</code> (50k rows, ~900 ids, 10 dates) and <code>rates.csv</code> — a full grid of every currency × date, so every transaction has a matching rate. USD rate is always <code>1.0</code>.</p>
+          </div>
+        </div>
+        <div class="step compute">
+          <div class="idx num">2</div>
+          <div class="body">
+            <span class="tag">convert · multiply</span>
+            <h3>Each transaction → USD</h3>
+            <p><code>usd = (plus − minus) × rate(currency, date)</code> using the transaction's own day's rate. Pure <code>Decimal</code>, no rounding mid-stream.</p>
+          </div>
+        </div>
+        <div class="step compute">
+          <div class="idx num">3</div>
+          <div class="body">
+            <span class="tag">batch · aggregate · sort</span>
+            <h3>Group per id, sort ascending</h3>
+            <p>Rows are batched; duplicate ids within a batch are pre-summed (an <code>ON CONFLICT</code> statement can't touch a row twice), then ids are sorted so every concurrent batch locks rows in the same order.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx num">4</div>
+          <div class="body">
+            <span class="tag">persist · concurrent</span>
+            <h3>Atomic upserts into PostgreSQL</h3>
+            <p>A pool of workers applies batches concurrently. Accumulation happens inside the database (<code>balance = balance + Δ</code>) under a row lock — no lost updates under any interleaving.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx num">5</div>
+          <div class="body">
+            <span class="tag">shutdown</span>
+            <h3>Ingest process exits</h3>
+            <p>The pool closes and the process terminates. Nothing in memory survives — the balances live only in PostgreSQL.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx num">6</div>
+          <div class="body">
+            <span class="tag">serve · fresh</span>
+            <h3>Read server starts</h3>
+            <p>A separate FastAPI process opens its own connection pool and answers reads purely from the database.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx num">7</div>
+          <div class="body">
+            <span class="tag">read · divide</span>
+            <h3>Query &amp; convert</h3>
+            <p>For a non-USD request: <code>value = usd ÷ rate(currency, max_date)</code> using the most recent rate date — same valuation for per-id and total. Money is returned as a JSON string, rounded 2dp HALF_UP.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONCURRENCY -->
+    <section>
+      <div class="sec-head">
+        <span class="eyebrow">Concurrency</span>
+        <h2>Correct under concurrent writes</h2>
+        <p>Writes are issued concurrently and must never lose an update. Correctness is pushed entirely into one SQL statement — never an app-side read-modify-write.</p>
+      </div>
+
+      <pre aria-label="Upsert SQL"><span class="kw">INSERT INTO</span> balances (id, name, balance_usd)
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">unnest</span>($1::int[], $2::text[], $3::numeric[])
+<span class="kw">ON CONFLICT</span> (id) <span class="kw">DO UPDATE</span>
+    <span class="kw">SET</span> balance_usd = balances.balance_usd + EXCLUDED.balance_usd;</pre>
+
+      <div class="cards">
+        <div class="card">
+          <div class="h"><span class="n">A</span><h3>DB-side accumulation</h3></div>
+          <p>The row-level lock on <code>ON CONFLICT DO UPDATE</code> makes the read-modify-write atomic inside Postgres. Order and interleaving no longer matter — no update is lost.</p>
+        </div>
+        <div class="card">
+          <div class="h"><span class="n">B</span><h3>Intra-batch aggregation</h3></div>
+          <p>A single statement can't affect one row twice, so duplicate ids inside a batch are pre-summed — also shrinking 50k inserts to a few hundred statements.</p>
+        </div>
+        <div class="card">
+          <div class="h"><span class="n">C</span><h3>Consistent lock order</h3></div>
+          <p>Every batch sorts its ids ascending, so concurrent statements acquire locks in the same order and can't form a deadlock cycle.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="role">Found by running the real thing</span>
+        <p>Item <b>C</b> came from running the full 50k ingest live: it threw <code>DeadlockDetectedError</code> because batches updated overlapping ids in different orders. The narrow unit test (50 writes to a single id) and the small end-to-end test (one batch) never surfaced it. Sorting ids fixed it, with a multi-batch regression test that reproduces the original deadlock.</p>
+      </div>
+    </section>
+
+    <!-- CURRENCY -->
+    <section>
+      <div class="sec-head">
+        <span class="eyebrow">Currency</span>
+        <h2>Two conversions, opposite directions</h2>
+        <p>A rate is the multiplier <span class="mono">1 unit of currency → USD</span>. The trap is the direction: ingest multiplies, reads divide.</p>
+      </div>
+
+      <div class="conv">
+        <div class="formula ingest">
+          <span class="role">On ingest · per transaction</span>
+          <div class="eq">usd = (plus − minus) <b>×</b> rate(ccy, <span class="mono">date</span>)</div>
+          <p class="ex">Each transaction uses its <em>own day's</em> rate. E.g. <span class="num">80.00</span> EUR on a day where EUR=<span class="num">1.0832</span> → <span class="num">86.656</span> USD.</p>
+        </div>
+        <div class="formula">
+          <span class="role">On read · per request</span>
+          <div class="eq">value = usd <b>÷</b> rate(ccy, <span class="mono">max_date</span>)</div>
+          <p class="ex">Valued at the most recent rate date (<span class="num">2026-06-24</span>, EUR=<span class="num">1.092949</span>). Account 100: <span class="num">13309.40</span> USD ÷ 1.092949 = <span class="num">12177.51</span> EUR. USD passes through unchanged.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- VERIFICATION -->
+    <section style="border-bottom:none;">
+      <div class="sec-head">
+        <span class="eyebrow">Verification</span>
+        <h2>Live results vs an independent reference</h2>
+        <p>The read server was started as a separate process and queried over HTTP. Every value is compared against a pure-Python reference computed inline from the CSVs — sharing no code with the ingest path.</p>
+      </div>
+
+      <div class="scroll">
+        <table>
+          <caption>Served by the API vs independently recomputed. Valuation date 2026-06-24, EUR rate 1.092949.</caption>
+          <thead>
+            <tr><th>Query</th><th>Served (USD)</th><th>Served (EUR)</th><th>Reference</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">balance/100</td><td class="served pos">13,309.40</td><td class="served pos">12,177.51</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
+            <tr><td class="mono">balance/101</td><td class="served neg">−8,001.32</td><td class="served neg">−7,320.85</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
+            <tr><td class="mono">balance/102</td><td class="served pos">8,931.31</td><td class="served pos">8,171.76</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
+            <tr><td class="mono">balance/103</td><td class="served neg">−9,337.48</td><td class="served neg">−8,543.38</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
+            <tr><td class="mono">balance/1000</td><td class="served" colspan="2" style="text-align:center; color:var(--muted);">absent → HTTP 404</td><td class="ref">expected 404</td><td><span class="ok">OK</span></td></tr>
+            <tr class="total"><td class="mono">total</td><td class="served neg">−226,328.98</td><td class="served neg">−207,081.01</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="verdict">ALL MATCH — served output equals the independent reference</div>
+
+      <div class="perf">
+        <div class="p"><div class="v num">0.42s</div><div class="k">generate 50k rows</div></div>
+        <div class="p"><div class="v num">1.15s</div><div class="k">ingest + persist</div></div>
+        <div class="p"><div class="v num">900</div><div class="k">balance rows</div></div>
+        <div class="p"><div class="v num">−226,328.98</div><div class="k">total USD</div></div>
+      </div>
+
+      <footer>
+        <span class="eyebrow" style="color:var(--pg);">Stack &amp; deliverables</span>
+        <div class="stack">
+          <span class="chip">Python 3.14</span>
+          <span class="chip">asyncpg · raw SQL</span>
+          <span class="chip">FastAPI</span>
+          <span class="chip">PostgreSQL 16</span>
+          <span class="chip">Docker Compose</span>
+          <span class="chip">pytest · 20 tests</span>
+        </div>
+        <p style="margin-top:16px;">Source code · schema DDL · seeded generator · ingest→restart→serve test · concurrency &amp; performance notes — all five deliverables present.</p>
+      </footer>
+    </section>
+
+  </div>
+</div>
