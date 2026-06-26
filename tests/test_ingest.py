@@ -34,3 +34,50 @@ async def test_concurrent_upserts_no_lost_update(pool):
     async with pool.acquire() as conn:
         total = await conn.fetchval("SELECT balance_usd FROM balances WHERE id=100")
     assert total == delta * n_batches  # 62.50, no updates lost
+
+
+def test_aggregate_emits_sorted_ids():
+    # Ids arrive jumbled; each batch must present them ascending so concurrent
+    # upserts lock rows in a consistent order (deadlock prevention).
+    rows = [TxnRow(i, f"acct{i}", Decimal("1")) for i in (300, 100, 250, 100, 175)]
+    (batch,) = list(batch_and_aggregate(rows, batch_size=10))
+    assert batch.ids == sorted(batch.ids)
+    assert batch.ids == [100, 175, 250, 300]
+    # names/deltas stay aligned with ids after the sort
+    assert dict(zip(batch.ids, batch.names))[100] == "acct100"
+    assert dict(zip(batch.ids, batch.deltas))[100] == Decimal("2")  # id 100 appeared twice
+
+
+async def test_run_ingest_many_concurrent_batches_no_deadlock(pool, tmp_path, monkeypatch):
+    # Real-flow scenario: many concurrent batches sharing overlapping id sets.
+    # Before sorting ids per batch this deadlocked; now it must complete and match
+    # an independent inline reference.
+    import csv
+    from collections import defaultdict
+    from datetime import date
+
+    from ledger.generate_data import generate
+    from ledger.ingest import run_ingest
+    from ledger.rates import build_rate_map, read_rates
+
+    monkeypatch.setenv("BATCH_SIZE", "300")  # ~20 concurrent multi-id batches
+    tx, rates = generate(seed=7, n_transactions=6000, out_dir=str(tmp_path))
+
+    await run_ingest(tx, rates)  # raised DeadlockDetectedError before the fix
+
+    rmap = build_rate_map(read_rates(rates))
+    ref: dict[int, Decimal] = defaultdict(lambda: Decimal(0))
+    with open(tx, newline="") as f:
+        for r in csv.DictReader(f):
+            ref[int(r["id"])] += (Decimal(r["plus"]) - Decimal(r["minus"])) * rmap[
+                (r["currency"].upper(), date.fromisoformat(r["date"]))
+            ]
+    async with pool.acquire() as conn:
+        got = {
+            r["id"]: r["balance_usd"]
+            for r in await conn.fetch("SELECT id, balance_usd FROM balances")
+        }
+
+    assert set(got) == set(ref)
+    for acc, expected in ref.items():
+        assert got[acc] == expected, f"id {acc}: {got[acc]} != {expected}"

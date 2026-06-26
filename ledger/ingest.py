@@ -37,7 +37,11 @@ def _aggregate(buffer: list[TxnRow]) -> Batch:
             acc[r.id][1] += r.usd_delta
         else:
             acc[r.id] = [r.name, r.usd_delta]
-    ids = list(acc.keys())
+    # Sort ids ascending so every concurrent batch acquires row locks in the
+    # same order. Without this, two batches updating an overlapping set of ids
+    # in different orders can deadlock (Postgres locks ON CONFLICT rows in the
+    # order they are presented).
+    ids = sorted(acc)
     names = [acc[i][0] for i in ids]
     deltas = [acc[i][1] for i in ids]
     return Batch(ids, names, deltas)
