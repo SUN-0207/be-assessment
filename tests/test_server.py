@@ -51,3 +51,11 @@ async def test_total(pool):
     async with AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.get("/total")
         assert r.json() == {"currency": "USD", "total": "150.00"}  # 200 + (-50)
+
+
+async def test_total_empty_db_is_zero(pool):
+    # The pool fixture truncates balances; an empty ledger totals to 0 (spec: empty -> 0).
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://t") as c:
+        r = await c.get("/total")
+        assert r.json() == {"currency": "USD", "total": "0.00"}
