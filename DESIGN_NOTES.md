@@ -1,82 +1,66 @@
 # Design Notes — Concurrency & Performance
 
-## Concurrency safety (no lost updates)
-Balance accumulation happens **inside PostgreSQL**, never as an app-side read-modify-write.
-Ingestion accumulates into a staging table (see *Atomic publish* below):
+## Concurrency: no lost updates
+Balances are accumulated **inside PostgreSQL**, never via an app-side read-modify-write. Each
+transaction is converted to USD, rows are grouped into batches, and every batch runs one statement:
 
     INSERT INTO balances_staging (id, name, balance_usd)
     SELECT * FROM unnest($1::int[], $2::text[], $3::numeric[])
     ON CONFLICT (id) DO UPDATE
         SET balance_usd = balances_staging.balance_usd + EXCLUDED.balance_usd;
 
-Many batches run concurrently (asyncpg pool), and the same account id appears in many of them.
-For each conflicting row, `ON CONFLICT DO UPDATE` takes a row-level lock and performs the
-`balance + delta` atomically, so the result is correct regardless of ordering or interleaving —
-no update is lost. `tests/test_ingest.py::test_concurrent_upserts_no_lost_update` proves this by
-applying 50 concurrent upserts to one row and asserting the exact sum.
+Batches run concurrently over an asyncpg pool. The row-level lock on `ON CONFLICT DO UPDATE` makes
+each `+= delta` atomic, so the result is correct under any interleaving — no update is lost. Two
+supporting rules:
 
-**Intra-batch aggregation** is both a performance win and a correctness necessity: a single
-`INSERT ... ON CONFLICT DO UPDATE` cannot affect the same target row twice, so duplicate ids
-within one statement are pre-summed before the upsert.
+- **Intra-batch aggregation** — duplicate ids in a batch are pre-summed first (one statement can't
+  touch a row twice), which also shrinks the work.
+- **Sorted ids** — each batch sorts ids ascending so concurrent statements take row locks in the
+  same order; otherwise overlapping batches deadlock.
 
-**Consistent lock ordering (deadlock avoidance).** Concurrent batches update overlapping sets
-of ids, and Postgres takes the `ON CONFLICT` row locks in the order rows are presented. If two
-batches presented their shared ids in different orders they could deadlock (A holds id X waiting
-for Y while B holds Y waiting for X). Each batch therefore sorts its ids ascending, so every
-concurrent statement acquires locks in the same order and no cycle can form.
-`tests/test_ingest.py::test_run_ingest_many_concurrent_batches_no_deadlock` exercises many
-concurrent multi-id batches (it deadlocked before this fix).
+*Tests: `test_concurrent_upserts_no_lost_update`, `test_run_ingest_many_concurrent_batches_no_deadlock`.*
 
 ## Atomic publish & online reload
-Ingestion writes **only** to staging tables. The live `balances` / `exchange_rates` are replaced
-in a single transaction at the very end:
+Ingestion writes only to `*_staging` tables; the live tables are swapped in **one transaction** at
+the end:
 
     BEGIN;
     DELETE FROM balances;        INSERT INTO balances        SELECT * FROM balances_staging;
     DELETE FROM exchange_rates;  INSERT INTO exchange_rates  SELECT * FROM exchange_rates_staging;
     COMMIT;
 
-So the read server can keep serving **while an ingest runs**: a request sees either the old
-snapshot or the new one in full — never empty, partial, or a balance/rate mismatch. Two details
-make it airtight:
+So the read server can keep serving **while an ingest runs** — a request sees the old snapshot or
+the new one in full, never empty/partial. Two details make it airtight:
 
-- **`DELETE`, not `TRUNCATE`.** `TRUNCATE` is not MVCC-safe — a concurrent reader on an older
-  snapshot would see the table as *empty*. `DELETE` keeps the old rows visible to in-flight
-  snapshots and only takes `ROW EXCLUSIVE`, so reads are never blocked and never observe a partial
-  swap. `tests/test_ingest.py::test_publish_is_mvcc_safe_for_inflight_readers` pins this (it was
-  caught by a live read-during-reload test that saw a transient `0.00` with `TRUNCATE`).
-- **Snapshot reads.** Each endpoint reads the balance and the rate inside one `REPEATABLE READ`
-  transaction, so its two queries can't straddle a publish commit.
+- **`DELETE`, not `TRUNCATE`** — `TRUNCATE` is not MVCC-safe (an in-flight reader would see the
+  table empty); `DELETE` keeps old rows visible to older snapshots and doesn't block reads.
+- **Snapshot reads** — each endpoint reads balance + rate in one `REPEATABLE READ` transaction, so
+  its queries can't straddle the publish commit.
 
-Crash safety falls out for free: if ingestion dies before the publish commit, the live tables are
-untouched (`tests/test_ingest.py::test_failed_ingest_leaves_live_untouched`). Re-running is
-idempotent — staging is rebuilt each run.
+If ingestion dies before the commit, the live tables are untouched; re-running rebuilds staging
+(idempotent).
+
+*Tests: `test_publish_is_mvcc_safe_for_inflight_readers`, `test_failed_ingest_leaves_live_untouched`.*
 
 ## Performance
-- 50,000 single-row inserts collapse into a few hundred multi-row statements (batch size 5000,
-  each aggregated to <=900 unique ids).
-- A connection pool (default 16) runs batches concurrently, overlapping IO latency.
-- `unnest(...)` ships each batch as arrays in a single round trip.
-- All arithmetic runs in `NUMERIC`; the app only ships deltas. Rates are bulk-loaded via `COPY`.
-- Transactions are streamed from CSV; memory stays bounded.
-- Result: 50k rows ingest in well under a few seconds on a local PostgreSQL.
+- ~10 multi-row upserts (50k rows ÷ batch 5000, each ≤900 unique ids) instead of 50k single inserts.
+- Connection pool (default 16) runs batches concurrently; `unnest(...)` ships each batch in one round
+  trip; rates load via `COPY`.
+- All arithmetic in `NUMERIC`; the CSV is streamed, so memory stays bounded.
+- 50k rows ingest in ~1s on a local PostgreSQL.
 
 ## Correctness & currency
 - `NUMERIC(38,10)` + Python `Decimal` end to end; no floats on the money path.
-- Ingest converts each transaction with `rate(currency, date)` (multiply); reads convert
-  USD -> target with `rate(currency, max_date)` (divide). Output rounded to 2dp, HALF_UP.
-
-## ORM consideration
-An ORM was considered and deliberately **not** used. The core operation is an *additive* upsert
-(`balance + EXCLUDED`); most ORM upsert helpers only overwrite, so the additive form would drop
-to explicit column arithmetic anyway. Raw SQL keeps the atomic-accumulation and row-lock
-behavior fully visible (which the assessment asks to be explained), avoids losing the `unnest`
-optimization, and keeps dependencies minimal.
+- Ingest **multiplies** by `rate(currency, date)`; reads **divide** by `rate(currency, max_date)`;
+  output rounded to 2dp, HALF_UP. `test_end_to_end` checks served values against an independent
+  reference.
 
 ## Restart isolation
-The read server creates its own pool on startup and reads only from PostgreSQL — it holds no
-in-memory state from ingestion. `tests/test_end_to_end.py` runs ingestion as a subprocess, waits
-for it to exit, then serves and asserts — proving balances survive process termination. Thanks to
-the atomic publish above, the server also does **not** have to be stopped for an ingest: it can
-stay up and serve a consistent snapshot throughout (the assessment's lifecycle of ingest-then-serve
-still works exactly as before; online reload is a superset).
+The read server is a separate process with its own pool, reading **only** from PostgreSQL — it
+keeps no in-memory state from ingestion, so balances survive the ingest process exiting (and, via
+the atomic publish above, the server need not be stopped for an ingest at all).
+
+## Raw SQL, not an ORM
+The core operation is an *additive* upsert (`balance + EXCLUDED`); ORM upsert helpers typically only
+overwrite, so the additive form drops to explicit SQL anyway. Raw SQL keeps the row-lock and
+atomic-swap behavior visible and dependencies minimal.
