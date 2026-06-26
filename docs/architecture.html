@@ -249,6 +249,61 @@
     @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   }
   a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--pg); outline-offset: 3px; border-radius: 4px; }
+
+  /* ---- architecture flow (redrawn) ---- */
+  .flow-rail { overflow-x: auto; padding-bottom: 10px; }
+  .flow { display: flex; align-items: stretch; gap: 0; min-width: 940px; }
+  .fnode {
+    flex: 1 1 0; background: var(--surface); border: 1px solid var(--hair-strong);
+    border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 1px 0 rgba(15,26,38,0.04), 0 14px 30px -26px rgba(15,26,38,0.5);
+  }
+  .fnode .role { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  .fnode h3 { font-size: 1.05rem; }
+  .fnode.proc { border-top: 3px solid var(--amber); }
+  .fnode.proc.b { border-top-color: var(--pg); }
+  .fnode.store { border-top: 3px solid var(--pg); background: linear-gradient(180deg, var(--pg-soft), var(--surface) 55%); }
+  .fnode.inputs, .fnode.client { background: var(--surface-2); border-style: dashed; }
+  .filechip { font-family: var(--mono); font-size: 0.78rem; background: var(--surface); border: 1px solid var(--hair-strong); border-radius: 8px; padding: 7px 10px; display: flex; flex-direction: column; gap: 1px; }
+  .filechip .meta { color: var(--muted); font-size: 0.67rem; }
+  .tablechip { font-family: var(--mono); font-size: 0.8rem; background: #fff; border: 1px solid #cdd9e8; border-radius: 8px; padding: 7px 10px; color: var(--pg); display: flex; flex-direction: column; gap: 1px; }
+  .tablechip .meta { color: var(--muted); font-size: 0.66rem; font-family: var(--sans); }
+  .ministeps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; }
+  .ministeps span { font-family: var(--mono); font-size: 0.65rem; background: var(--amber-soft); color: var(--amber); border-radius: 6px; padding: 3px 7px; }
+  .fnode.proc.b .ministeps span { background: var(--pg-soft); color: var(--pg); }
+  .farrow { flex: 0 0 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; }
+  .farrow .lbl { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); text-align: center; }
+  .farrow svg { width: 100%; height: 20px; }
+  .farrow.amber { color: var(--amber); }
+  .farrow.blue { color: var(--pg); }
+
+  .lifecycle { margin-top: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: var(--surface-2); border: 1px dashed var(--hair-strong); border-radius: 10px; padding: 14px 16px; font-size: 0.88rem; color: var(--muted); }
+  .lifecycle b { color: var(--ink); font-weight: 600; }
+  .lifecycle .step-pill { font-family: var(--mono); font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+  .lifecycle .step-pill.a { background: var(--amber-soft); color: var(--amber); }
+  .lifecycle .step-pill.b { background: var(--pg-soft); color: var(--pg); }
+  .lifecycle .sep { color: var(--debit); font-weight: 700; font-family: var(--mono); font-size: 0.82rem; }
+
+  /* ---- CSV -> DB transform ---- */
+  .xform-rail { overflow-x: auto; padding-bottom: 10px; }
+  .xform { display: flex; align-items: center; gap: 8px; min-width: 820px; }
+  .stage { background: var(--surface); border: 1px solid var(--hair-strong); border-radius: 10px; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; max-width: 170px; }
+  .stage .t { font-family: var(--mono); font-size: 0.76rem; font-weight: 600; }
+  .stage .d { font-family: var(--mono); font-size: 0.66rem; color: var(--muted); }
+  .stage.in { border-style: dashed; background: var(--surface-2); }
+  .stage.out { border-top: 3px solid var(--pg); }
+  .xarrow { flex: 0 0 auto; color: var(--amber); font-family: var(--mono); font-weight: 700; font-size: 1rem; }
+  .props { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .props .chip { font-family: var(--mono); font-size: 0.72rem; background: var(--surface); border: 1px solid var(--hair); border-radius: 999px; padding: 5px 11px; color: #3a4753; }
+  .props .chip b { color: var(--pg); font-weight: 600; }
+  .writepaths { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; margin-top: 24px; }
+  .wp { background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 18px; border-left: 4px solid var(--amber); }
+  .wp.upsert { border-left-color: var(--pg); }
+  .wp .role { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
+  .wp.upsert .role { color: var(--pg); }
+  .wp h3 { font-size: 1rem; margin: 6px 0; }
+  .wp p { font-size: 0.86rem; color: var(--muted); }
+  .wp code { font-family: var(--mono); font-size: 0.82em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; color: #34424f; }
 </style>
 
 <div class="page">
@@ -276,55 +331,57 @@
         <p>The ingest process and the read server never share memory. PostgreSQL is the only thing between them — so both the balances and the exchange rates needed for read-side conversion are persisted. The read server is proven correct after the ingest process has fully exited.</p>
       </div>
 
-      <div class="scroll">
-        <div class="arch">
-          <div class="node proc">
+      <div class="flow-rail">
+        <div class="flow">
+          <div class="fnode inputs">
+            <span class="role">Input files</span>
+            <div class="filechip">transactions.csv<span class="meta">50,000 rows</span></div>
+            <div class="filechip">rates.csv<span class="meta">currency × date grid</span></div>
+          </div>
+
+          <div class="farrow amber"><span class="lbl">feeds</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+          <div class="fnode proc">
             <span class="role">Process A · batch</span>
             <h3>Ingest</h3>
-            <span class="pill exit">runs then exits</span>
-            <ul>
-              <li>reads <code>transactions.csv</code> + <code>rates.csv</code></li>
-              <li>converts each row to USD</li>
-              <li>concurrent atomic upserts</li>
-            </ul>
+            <span class="pill exit">runs → exits</span>
+            <div class="ministeps"><span>parse</span><span>convert</span><span>batch</span><span>upsert</span></div>
           </div>
 
-          <div class="link" aria-hidden="true">
-            <span class="lbl">writes<br>balances + rates</span>
-            <svg viewBox="0 0 90 22" fill="none"><path d="M2 11 H78" stroke="currentColor" class="dir write" stroke-width="2"/><path d="M74 5 L84 11 L74 17" stroke="currentColor" class="dir write" stroke-width="2" fill="none"/></svg>
-          </div>
+          <div class="farrow amber"><span class="lbl">writes</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
 
-          <div class="node store">
+          <div class="fnode store">
             <span class="role">Source of truth</span>
             <h3>PostgreSQL 16</h3>
-            <span class="pill pg">NUMERIC(38,10)</span>
-            <ul>
-              <li><code>balances</code> — one row / id</li>
-              <li><code>exchange_rates</code> — (date, ccy)</li>
-            </ul>
+            <div class="tablechip">balances<span class="meta">one row per id · NUMERIC(38,10)</span></div>
+            <div class="tablechip">exchange_rates<span class="meta">(rate_date, currency)</span></div>
           </div>
 
-          <div class="link" aria-hidden="true">
-            <span class="lbl">reads<br>only from DB</span>
-            <svg viewBox="0 0 90 22" fill="none"><path d="M2 11 H78" stroke="currentColor" class="dir" stroke-width="2"/><path d="M74 5 L84 11 L74 17" stroke="currentColor" class="dir" stroke-width="2" fill="none"/></svg>
-          </div>
+          <div class="farrow blue"><span class="lbl">reads</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
 
-          <div class="node proc" style="border-top-color: var(--pg);">
+          <div class="fnode proc b">
             <span class="role">Process B · server</span>
             <h3>Read server</h3>
             <span class="pill live">separate run</span>
-            <ul>
-              <li><code>GET /balance/{id}</code></li>
-              <li><code>GET /total</code></li>
-              <li>FastAPI · own pool</li>
-            </ul>
+            <div class="ministeps"><span>GET /balance/{id}</span><span>GET /total</span></div>
+          </div>
+
+          <div class="farrow blue"><span class="lbl">HTTP · JSON</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+
+          <div class="fnode client">
+            <span class="role">Client</span>
+            <h3>curl / app</h3>
+            <div class="filechip">balance as string<span class="meta">in any currency</span></div>
           </div>
         </div>
       </div>
 
-      <div class="barrier-note">
-        <span class="mono" aria-hidden="true" style="color:var(--debit); font-weight:700;">⊘</span>
-        <span><b>No shared in-memory state.</b> Restart isolation is proven in the test suite: ingestion runs as a subprocess that exits, then the server is started fresh and asserted against an independent reference.</span>
+      <div class="lifecycle">
+        <span class="step-pill a">① ingest</span> <b>runs &amp; fully exits</b>
+        <span class="sep">⊘ no shared memory</span>
+        <span class="step-pill b">② server</span> <b>starts fresh — reads only from PostgreSQL</b>
+        <span style="flex-basis:100%; height:0;"></span>
+        <span>Restart isolation is proven in the test suite: ingestion runs as a subprocess that exits, then the server is asserted against an independent reference.</span>
       </div>
     </section>
 
@@ -393,6 +450,67 @@
             <p>For a non-USD request: <code>value = usd ÷ rate(currency, max_date)</code> using the most recent rate date — same valuation for per-id and total. Money is returned as a JSON string, rounded 2dp HALF_UP.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- CSV -> DB -->
+    <section>
+      <div class="sec-head">
+        <span class="eyebrow">CSV → Database</span>
+        <h2>How each row becomes a balance</h2>
+        <p>The two input files take two different write paths into PostgreSQL: rates are bulk-loaded as-is, while transactions are streamed, converted, and accumulated.</p>
+      </div>
+
+      <div class="xform-rail">
+        <div class="xform">
+          <div class="stage in"><span class="t">CSV row</span><span class="d">id,name,plus,minus,ccy,date</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage"><span class="t">parse</span><span class="d">Decimal(plus,minus) · date</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage"><span class="t">rate lookup</span><span class="d">rate_map[(ccy,date)]</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage"><span class="t">× rate</span><span class="d">usd = (plus−minus)×rate</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage"><span class="t">batch + sort</span><span class="d">sum per id · ids ascending</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage"><span class="t">UPSERT</span><span class="d">unnest · concurrent</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage out"><span class="t">balances</span><span class="d">balance += Δ</span></div>
+        </div>
+      </div>
+
+      <pre aria-label="Worked example"><span class="cm"># one transaction row from transactions.csv</span>
+100,acct100,250.00,120.50,USD,2026-06-15
+<span class="cm"># rate(USD, 2026-06-15) = 1.0   → multiply by the row's own (currency, date) rate</span>
+usd = (<span class="fn">250.00</span> − <span class="fn">120.50</span>) × <span class="fn">1.0</span> = <span class="lit">129.50</span>
+<span class="cm"># accumulated atomically into the account's running balance</span>
+balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</span></pre>
+
+      <div class="writepaths">
+        <div class="wp">
+          <span class="role">rates.csv → exchange_rates</span>
+          <h3>Bulk load (COPY)</h3>
+          <p>Rates need no transformation or accumulation, so they're loaded in one shot with
+          <code>copy_records_to_table</code> (Postgres COPY). They're persisted so the read
+          server can convert later without any of ingestion's in-memory state.</p>
+        </div>
+        <div class="wp upsert">
+          <span class="role">transactions.csv → balances</span>
+          <h3>Accumulating upsert</h3>
+          <p>Each batch runs one <code>unnest</code> + <code>ON CONFLICT DO UPDATE</code> that does
+          <code>balance = balance + Δ</code> inside the database, under a row lock — additive,
+          concurrent, and free of lost updates.</p>
+        </div>
+      </div>
+
+      <div class="props">
+        <span class="chip"><b>streaming</b> · bounded memory</span>
+        <span class="chip"><b>Decimal ↔ NUMERIC</b> · no floats</span>
+        <span class="chip"><b>batch 5000</b> rows</span>
+        <span class="chip"><b>pool 16</b> · concurrent</span>
+        <span class="chip"><b>atomic +=</b> · row lock</span>
+        <span class="chip"><b>sorted ids</b> · no deadlock</span>
+        <span class="chip"><b>TRUNCATE first</b> · idempotent re-run</span>
       </div>
     </section>
 
