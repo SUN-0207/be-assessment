@@ -32,6 +32,10 @@ def generate(
     n_dates: int = 10,
 ) -> tuple[str, str]:
     rng = random.Random(seed)
+    if not 1 <= n_ids <= 900:
+        raise ValueError("n_ids must be between 1 and 900 (account ids 100..999)")
+    if not 1 <= n_dates <= 10:
+        raise ValueError("n_dates must be between 1 and 10")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 

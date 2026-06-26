@@ -2,7 +2,7 @@ import csv
 from datetime import date
 from decimal import Decimal
 
-from ledger.generate_data import generate
+from ledger.generate_data import CURRENCIES, generate
 from ledger.rates import build_rate_map, read_rates
 
 
@@ -22,6 +22,8 @@ def test_generate_invariants(tmp_path):
     assert len(dates) <= 10
 
     rate_map = build_rate_map(read_rates(rates_path))
+    # Full grid: every currency x every date must be present (default n_dates=10).
+    assert len(rate_map) == len(CURRENCIES) * 10
     # Every (currency, date) in transactions has a matching rate.
     for r in txns:
         assert (r["currency"].upper(), date.fromisoformat(r["date"])) in rate_map
