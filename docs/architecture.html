@@ -88,7 +88,6 @@
   .stat { background: var(--surface); padding: 16px 18px; }
   .stat .v { font-family: var(--mono); font-size: 1.45rem; font-weight: 600; letter-spacing: -0.02em; }
   .stat .k { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
-  .stat.good .v { color: var(--credit); }
 
   /* ---- sections ---- */
   section { padding: clamp(44px, 7vw, 72px) 0; border-bottom: 1px solid var(--hair); }
@@ -96,57 +95,10 @@
   .sec-head .eyebrow { margin-bottom: 14px; }
   .sec-head p { color: var(--muted); max-width: 62ch; margin-top: 10px; }
 
-  /* ---- architecture schematic ---- */
-  .scroll { overflow-x: auto; padding-bottom: 6px; }
-  .arch {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    min-width: 760px;
-    margin: 6px 0 8px;
-  }
-  .node {
-    background: var(--surface);
-    border: 1px solid var(--hair-strong);
-    border-radius: 14px;
-    padding: 20px;
-    flex: 1 1 0;
-    display: flex; flex-direction: column; gap: 10px;
-    box-shadow: 0 1px 0 rgba(15,26,38,0.04), 0 12px 28px -22px rgba(15,26,38,0.4);
-  }
-  .node.proc { border-top: 3px solid var(--amber); }
-  .node.store { border-top: 3px solid var(--pg); background: linear-gradient(180deg, var(--pg-soft), var(--surface) 60%); }
-  .node .role { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-  .node h3 { font-size: 1.15rem; }
-  .node ul { margin: 4px 0 0; padding-left: 1.05em; color: var(--muted); font-size: 0.9rem; }
-  .node li { margin: 3px 0; }
-  .node li code { font-family: var(--mono); font-size: 0.82em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; color: #34424f; }
-
+  /* ---- state pills ---- */
   .pill { align-self: flex-start; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
   .pill.exit { background: #fbe9e7; color: var(--debit); }
   .pill.live { background: #e4f3ec; color: var(--credit); }
-  .pill.pg { background: #e2ebf6; color: var(--pg); }
-
-  .link {
-    flex: 0 0 96px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px; position: relative; padding: 0 6px;
-  }
-  .link .lbl { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); text-align: center; }
-  .link svg { width: 100%; height: 22px; display: block; }
-  .link .dir { color: var(--pg); }
-  .link .dir.write { color: var(--amber); }
-
-  .barrier-note {
-    margin-top: 16px;
-    display: flex; align-items: center; gap: 12px;
-    font-size: 0.86rem; color: var(--muted);
-    background: var(--surface-2);
-    border: 1px dashed var(--hair-strong);
-    border-radius: 10px;
-    padding: 12px 16px;
-  }
-  .barrier-note b { color: var(--ink); font-weight: 600; }
 
   /* ---- pipeline ---- */
   .pipe { display: grid; gap: 0; }
@@ -203,41 +155,6 @@
   .formula.ingest .eq b { color: var(--amber); }
   .formula .ex { font-size: 0.85rem; color: var(--muted); }
   .formula .ex .num { color: var(--ink); }
-
-  /* ---- results table ---- */
-  table { border-collapse: collapse; width: 100%; min-width: 540px; font-size: 0.9rem; }
-  caption { text-align: left; color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; }
-  th, td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--hair); }
-  th:first-child, td:first-child { text-align: left; }
-  thead th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--hair-strong); }
-  tbody td.mono, tbody td .mono { font-family: var(--mono); }
-  td.served, td.ref { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  td.pos { color: var(--credit); }
-  td.neg { color: var(--debit); }
-  .ok { font-family: var(--mono); font-size: 0.74rem; font-weight: 600; color: var(--credit); }
-  .ok::before { content: "✓ "; }
-  tr.total td { border-top: 2px solid var(--hair-strong); font-weight: 600; }
-  tr.total td:first-child { font-weight: 600; }
-  .verdict {
-    margin-top: 20px; display: inline-flex; align-items: center; gap: 10px;
-    background: #e4f3ec; color: var(--credit); border: 1px solid #b9e0cb;
-    padding: 12px 18px; border-radius: 10px; font-family: var(--mono); font-size: 0.9rem; font-weight: 600;
-  }
-
-  .perf { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-top: 22px; }
-  .perf .p { background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 16px; }
-  .perf .p .v { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; }
-  .perf .p .k { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
-
-  /* ---- callout ---- */
-  .callout {
-    background: linear-gradient(180deg, #fbf3eb, var(--surface) 70%);
-    border: 1px solid #ecd8c4; border-left: 4px solid var(--amber);
-    border-radius: 12px; padding: 18px 20px; margin-top: 24px;
-  }
-  .callout .role { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); font-weight: 600; }
-  .callout p { font-size: 0.92rem; color: #4a4034; margin-top: 6px; }
-  .callout code { font-family: var(--mono); font-size: 0.85em; background: #fff; border: 1px solid #ecd8c4; padding: 1px 5px; border-radius: 5px; }
 
   footer { padding: 44px 0 0; color: var(--muted); font-size: 0.85rem; }
   footer .stack { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
