@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Env
+.env
+
+# Generated synthetic data
+transactions.csv
+rates.csv
+
+# Subagent-driven-development scratch
+.superpowers/
