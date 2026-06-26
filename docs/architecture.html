@@ -74,20 +74,7 @@
   }
   .hero .eyebrow { margin-bottom: 22px; }
   .hero h1 { margin-bottom: 18px; }
-  .hero .lede { margin-bottom: 36px; }
-
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-    gap: 1px;
-    background: var(--hair);
-    border: 1px solid var(--hair);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .stat { background: var(--surface); padding: 16px 18px; }
-  .stat .v { font-family: var(--mono); font-size: 1.45rem; font-weight: 600; letter-spacing: -0.02em; }
-  .stat .k { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .hero .lede { margin-bottom: 8px; }
 
   /* ---- sections ---- */
   section { padding: clamp(44px, 7vw, 72px) 0; border-bottom: 1px solid var(--hair); }
@@ -230,13 +217,6 @@
       <span class="eyebrow">Backend Assessment · Python + PostgreSQL</span>
       <h1>Ledger Balance Aggregation</h1>
       <p class="lede">A two-process service: one run ingests 50,000 financial transactions into PostgreSQL with concurrency-safe accumulation, then exits; a separate read server serves per-account and total balances in any currency — reading only from the database.</p>
-      <div class="stats" role="list">
-        <div class="stat" role="listitem"><div class="v num">50,000</div><div class="k">transactions</div></div>
-        <div class="stat" role="listitem"><div class="v num">~900</div><div class="k">accounts</div></div>
-        <div class="stat" role="listitem"><div class="v num">5</div><div class="k">currencies</div></div>
-        <div class="stat" role="listitem"><div class="v num">≤10</div><div class="k">dates</div></div>
-        <div class="stat" role="listitem"><div class="v num">2</div><div class="k">processes</div></div>
-      </div>
     </header>
 
     <!-- ARCHITECTURE -->
