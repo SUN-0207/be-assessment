@@ -18,6 +18,14 @@ applying 50 concurrent upserts to one row and asserting the exact sum.
 `INSERT ... ON CONFLICT DO UPDATE` cannot affect the same target row twice, so duplicate ids
 within one statement are pre-summed before the upsert.
 
+**Consistent lock ordering (deadlock avoidance).** Concurrent batches update overlapping sets
+of ids, and Postgres takes the `ON CONFLICT` row locks in the order rows are presented. If two
+batches presented their shared ids in different orders they could deadlock (A holds id X waiting
+for Y while B holds Y waiting for X). Each batch therefore sorts its ids ascending, so every
+concurrent statement acquires locks in the same order and no cycle can form.
+`tests/test_ingest.py::test_run_ingest_many_concurrent_batches_no_deadlock` exercises many
+concurrent multi-id batches (it deadlocked before this fix).
+
 ## Performance
 - 50,000 single-row inserts collapse into a few hundred multi-row statements (batch size 5000,
   each aggregated to <=900 unique ids).
