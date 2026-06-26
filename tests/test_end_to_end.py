@@ -7,7 +7,6 @@ from decimal import Decimal
 
 from httpx import ASGITransport, AsyncClient
 
-from ledger.db import create_pool
 from ledger.generate_data import generate
 from ledger.rates import build_rate_map, from_usd, read_rates, round_money
 from ledger.server import app
@@ -49,6 +48,7 @@ async def test_ingest_restart_and_serve(tmp_path):
         for acc in sample_ids:
             r = await c.get(f"/balance/{acc}")
             assert r.json()["balance"] == str(round_money(balances[acc]))
+            assert r.json()["name"] == names[acc]
 
             r_eur = await c.get(f"/balance/{acc}", params={"currency": "EUR"})
             expected_eur = str(round_money(from_usd(balances[acc], eur_rate)))
@@ -61,5 +61,5 @@ async def test_ingest_restart_and_serve(tmp_path):
         r_total_eur = await c.get("/total", params={"currency": "EUR"})
         assert r_total_eur.json()["total"] == str(round_money(from_usd(total, eur_rate)))
 
-        missing = await c.get("/balance/99")
+        missing = await c.get(f"/balance/{max(balances) + 1}")
         assert missing.status_code == 404
