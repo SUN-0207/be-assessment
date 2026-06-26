@@ -181,7 +181,8 @@ date,currency,rate
 ```
 
 Every `(currency, date)` that appears in the transactions must have a matching rate row.
-Re-running ingest is safe — it truncates and reloads (a fresh full load).
+Re-running ingest is safe — it rebuilds staging and atomically replaces the live tables (a fresh
+full load).
 
 ---
 

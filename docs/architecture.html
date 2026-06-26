@@ -315,9 +315,9 @@
         <div class="step">
           <div class="idx num">4</div>
           <div class="body">
-            <span class="tag">persist · concurrent</span>
-            <h3>Atomic upserts into PostgreSQL</h3>
-            <p>A pool of workers applies batches concurrently. Accumulation happens inside the database (<code>balance = balance + Δ</code>) under a row lock — no lost updates under any interleaving.</p>
+            <span class="tag">persist · publish</span>
+            <h3>Concurrent upserts → atomic publish</h3>
+            <p>A pool of workers applies batches concurrently into a <strong>staging</strong> table (<code>balance = balance + Δ</code> under a row lock — no lost updates). One final transaction then publishes staging into the live tables.</p>
           </div>
         </div>
         <div class="step">
@@ -384,11 +384,12 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
 
       <div class="writepaths">
         <div class="wp">
-          <span class="role">rates.csv → exchange_rates</span>
-          <h3>Bulk load (COPY)</h3>
+          <span class="role">rates.csv → exchange_rates_staging → exchange_rates</span>
+          <h3>Bulk load (COPY), same publish</h3>
           <p>Rates need no transformation or accumulation, so they're loaded in one shot with
-          <code>copy_records_to_table</code> (Postgres COPY). They're persisted so the read
-          server can convert later without any of ingestion's in-memory state.</p>
+          <code>copy_records_to_table</code> (Postgres COPY) into staging, then published in the
+          same swap. They're persisted so the read server can convert without any of ingestion's
+          in-memory state.</p>
         </div>
         <div class="wp upsert">
           <span class="role">transactions.csv → balances_staging → balances</span>
@@ -420,10 +421,10 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
         <p>Writes are issued concurrently and must never lose an update. Correctness is pushed entirely into one SQL statement — never an app-side read-modify-write.</p>
       </div>
 
-      <pre aria-label="Upsert SQL"><span class="kw">INSERT INTO</span> balances (id, name, balance_usd)
+      <pre aria-label="Upsert SQL"><span class="kw">INSERT INTO</span> balances_staging (id, name, balance_usd)
 <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">unnest</span>($1::int[], $2::text[], $3::numeric[])
 <span class="kw">ON CONFLICT</span> (id) <span class="kw">DO UPDATE</span>
-    <span class="kw">SET</span> balance_usd = balances.balance_usd + EXCLUDED.balance_usd;</pre>
+    <span class="kw">SET</span> balance_usd = balances_staging.balance_usd + EXCLUDED.balance_usd;</pre>
 
       <div class="cards">
         <div class="card">
@@ -432,7 +433,7 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
         </div>
         <div class="card">
           <div class="h"><span class="n">B</span><h3>Intra-batch aggregation</h3></div>
-          <p>A single statement can't affect one row twice, so duplicate ids inside a batch are pre-summed — also shrinking 50k inserts to a few hundred statements.</p>
+          <p>A single statement can't affect one row twice, so duplicate ids inside a batch are pre-summed — also shrinking 50k inserts to ~10 batched statements.</p>
         </div>
         <div class="card">
           <div class="h"><span class="n">C</span><h3>Consistent lock order</h3></div>
