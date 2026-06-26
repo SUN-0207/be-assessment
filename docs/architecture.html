@@ -82,11 +82,6 @@
   .sec-head .eyebrow { margin-bottom: 14px; }
   .sec-head p { color: var(--muted); max-width: 62ch; margin-top: 10px; }
 
-  /* ---- state pills ---- */
-  .pill { align-self: flex-start; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
-  .pill.exit { background: #fbe9e7; color: var(--debit); }
-  .pill.live { background: #e4f3ec; color: var(--credit); }
-
   /* ---- pipeline ---- */
   .pipe { display: grid; gap: 0; }
   .step {
@@ -469,7 +464,7 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
       <footer>
         <span class="eyebrow" style="color:var(--pg);">Stack</span>
         <div class="stack">
-          <span class="chip">Python 3.14</span>
+          <span class="chip">Python 3.11+</span>
           <span class="chip">asyncpg · raw SQL</span>
           <span class="chip">FastAPI</span>
           <span class="chip">PostgreSQL 16</span>

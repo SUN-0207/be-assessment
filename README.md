@@ -283,9 +283,8 @@ Full rationale (including the ORM-vs-raw-SQL decision and the deadlock fix) is i
 
 ## Database schema
 
-See [db/schema.sql](db/schema.sql). Two live tables — final balances (one row per id) and the
-exchange rates (persisted so the read server can convert without ingestion's memory). The schema
-also defines matching `*_staging` tables that ingestion writes to before the atomic publish swap:
+See [db/schema.sql](db/schema.sql) for the full DDL. The two live tables below are mirrored by
+UNLOGGED `*_staging` tables that ingestion writes to before the atomic publish swap:
 
 ```sql
 CREATE TABLE IF NOT EXISTS balances (
