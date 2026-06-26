@@ -1,6 +1,6 @@
 import csv
 from datetime import date
-from decimal import ROUND_HALF_DOWN, ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import NamedTuple
 
 TWO_PLACES = Decimal("0.01")
@@ -21,11 +21,7 @@ def from_usd(usd: Decimal, rate: Decimal) -> Decimal:
 
 
 def round_money(value: Decimal) -> Decimal:
-    """Round to 2 decimal places, half toward positive infinity (ROUND_HALF_UP for non-negative,
-    ROUND_HALF_DOWN for negative — net effect: ties always round toward +inf)."""
-    if value >= 0:
-        return value.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
-    return value.quantize(TWO_PLACES, rounding=ROUND_HALF_DOWN)
+    return value.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
 
 
 def read_rates(path: str) -> list[RateRow]:

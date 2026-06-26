@@ -25,7 +25,7 @@ def test_from_usd_divides():
 def test_round_money_half_up():
     assert round_money(Decimal("1.005")) == Decimal("1.01")
     assert round_money(Decimal("2.675")) == Decimal("2.68")
-    assert round_money(Decimal("-1.005")) == Decimal("-1.00")  # HALF_UP rounds toward +inf at .5
+    assert round_money(Decimal("-1.005")) == Decimal("-1.01")  # HALF_UP rounds away from zero
 
 
 def test_read_rates_and_map(tmp_path):
