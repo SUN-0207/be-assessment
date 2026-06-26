@@ -53,13 +53,17 @@ async def _conversion_rate(conn, currency: str) -> Decimal:
 async def get_balance(account_id: int, currency: str = Query("USD")):
     pool = await _get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT name, balance_usd FROM balances WHERE id = $1", account_id
-        )
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
-        rate = await _conversion_rate(conn, currency)
-        value = round_money(from_usd(row["balance_usd"], rate))
+        # Read the balance and the rate from one consistent snapshot, so a
+        # concurrent ingest publish can never be observed half-applied within a
+        # single request.
+        async with conn.transaction(isolation="repeatable_read"):
+            row = await conn.fetchrow(
+                "SELECT name, balance_usd FROM balances WHERE id = $1", account_id
+            )
+            rate = None if row is None else await _conversion_rate(conn, currency)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+    value = round_money(from_usd(row["balance_usd"], rate))
     return {
         "id": account_id,
         "name": row["name"],
@@ -72,7 +76,9 @@ async def get_balance(account_id: int, currency: str = Query("USD")):
 async def get_total(currency: str = Query("USD")):
     pool = await _get_pool()
     async with pool.acquire() as conn:
-        total_usd = await conn.fetchval("SELECT COALESCE(SUM(balance_usd), 0) FROM balances")
-        rate = await _conversion_rate(conn, currency)
-        value = round_money(from_usd(total_usd, rate))
+        # Sum and rate from one consistent snapshot (see get_balance).
+        async with conn.transaction(isolation="repeatable_read"):
+            total_usd = await conn.fetchval("SELECT COALESCE(SUM(balance_usd), 0) FROM balances")
+            rate = await _conversion_rate(conn, currency)
+    value = round_money(from_usd(total_usd, rate))
     return {"currency": currency.upper(), "total": str(value)}

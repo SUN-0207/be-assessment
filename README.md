@@ -249,13 +249,13 @@ max_date)`. The same valuation date is used for both per-id and total. A USD (or
 request returns the stored USD value. Output is rounded to 2 decimals, half-up.
 
 **Concurrency safety.** Balance accumulation happens inside one SQL statement, never as an
-app-side read-modify-write:
+app-side read-modify-write (ingestion accumulates into a staging table):
 
 ```sql
-INSERT INTO balances (id, name, balance_usd)
+INSERT INTO balances_staging (id, name, balance_usd)
 SELECT * FROM unnest($1::int[], $2::text[], $3::numeric[])
 ON CONFLICT (id) DO UPDATE
-    SET balance_usd = balances.balance_usd + EXCLUDED.balance_usd;
+    SET balance_usd = balances_staging.balance_usd + EXCLUDED.balance_usd;
 ```
 
 Batches run concurrently over a connection pool; the row-level lock on `ON CONFLICT DO UPDATE`
@@ -263,9 +263,17 @@ makes each `+=` atomic, so no update is lost under any interleaving. Ids within 
 pre-summed (a statement can't touch a row twice) and sorted ascending so concurrent batches
 acquire row locks in a consistent order (deadlock avoidance).
 
+**Atomic publish & online reload.** Ingestion writes only to staging tables, then replaces the
+live `balances` / `exchange_rates` in a **single transaction** (`DELETE` + `INSERT … SELECT FROM
+*_staging`). So the read server can keep serving **while an ingest runs** — every request sees
+either the old snapshot or the new one in full, never empty/partial. `DELETE` is used rather than
+`TRUNCATE` (which is not MVCC-safe), and each endpoint reads balance + rate inside one
+`REPEATABLE READ` snapshot. If ingestion crashes before the swap, the live tables are untouched.
+
 **Restart isolation.** The read server opens its own pool and reads only from PostgreSQL; it
-shares no memory with ingestion. The end-to-end test runs ingestion as a subprocess, waits for
-it to exit, then starts the server and asserts the served values.
+shares no memory with ingestion. The end-to-end test runs ingestion as a subprocess, waits for it
+to exit, then starts the server and asserts the served values. The server does not need to be
+stopped for an ingest (see Atomic publish above).
 
 Full rationale (including the ORM-vs-raw-SQL decision and the deadlock fix) is in
 **[DESIGN_NOTES.md](DESIGN_NOTES.md)**.
@@ -274,8 +282,9 @@ Full rationale (including the ORM-vs-raw-SQL decision and the deadlock fix) is i
 
 ## Database schema
 
-See [db/schema.sql](db/schema.sql). Two tables — final balances (one row per id) and the
-exchange rates (persisted so the read server can convert without ingestion's memory):
+See [db/schema.sql](db/schema.sql). Two live tables — final balances (one row per id) and the
+exchange rates (persisted so the read server can convert without ingestion's memory). The schema
+also defines matching `*_staging` tables that ingestion writes to before the atomic publish swap:
 
 ```sql
 CREATE TABLE IF NOT EXISTS balances (
@@ -310,7 +319,7 @@ The suite covers:
 | Conversion & rounding (multiply/divide, half-up) | `tests/test_rates.py` |
 | Generator invariants (full rate grid, determinism, ranges) | `tests/test_generate_data.py` |
 | Schema apply + truncate | `tests/test_db.py` |
-| Concurrency: no lost updates + no deadlock under many batches | `tests/test_ingest.py` |
+| Concurrency: no lost updates, no deadlock, atomic publish, MVCC-safe swap, crash-safety | `tests/test_ingest.py` |
 | Endpoints: USD/non-USD, 404, 400, empty-DB total | `tests/test_server.py` |
 | **End-to-end: ingest → restart → serve, vs an independent reference** | `tests/test_end_to_end.py` |
 

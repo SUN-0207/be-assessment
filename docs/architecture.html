@@ -318,7 +318,7 @@
         <div class="stat" role="listitem"><div class="v num">1.15s</div><div class="k">ingest time</div></div>
         <div class="stat" role="listitem"><div class="v num">900</div><div class="k">accounts</div></div>
         <div class="stat" role="listitem"><div class="v num">5</div><div class="k">currencies</div></div>
-        <div class="stat good" role="listitem"><div class="v num">20/20</div><div class="k">tests green</div></div>
+        <div class="stat good" role="listitem"><div class="v num">23/23</div><div class="k">tests green</div></div>
         <div class="stat good" role="listitem"><div class="v">served = ref</div><div class="k">cross-checked</div></div>
       </div>
     </header>
@@ -473,9 +473,11 @@
           <span class="xarrow">→</span>
           <div class="stage"><span class="t">batch + sort</span><span class="d">sum per id · ids ascending</span></div>
           <span class="xarrow">→</span>
-          <div class="stage"><span class="t">UPSERT</span><span class="d">unnest · concurrent</span></div>
+          <div class="stage"><span class="t">UPSERT</span><span class="d">→ balances_staging</span></div>
           <span class="xarrow">→</span>
-          <div class="stage out"><span class="t">balances</span><span class="d">balance += Δ</span></div>
+          <div class="stage"><span class="t">publish</span><span class="d">swap · 1 transaction</span></div>
+          <span class="xarrow">→</span>
+          <div class="stage out"><span class="t">balances (live)</span><span class="d">atomic · consistent</span></div>
         </div>
       </div>
 
@@ -495,11 +497,12 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
           server can convert later without any of ingestion's in-memory state.</p>
         </div>
         <div class="wp upsert">
-          <span class="role">transactions.csv → balances</span>
-          <h3>Accumulating upsert</h3>
-          <p>Each batch runs one <code>unnest</code> + <code>ON CONFLICT DO UPDATE</code> that does
-          <code>balance = balance + Δ</code> inside the database, under a row lock — additive,
-          concurrent, and free of lost updates.</p>
+          <span class="role">transactions.csv → balances_staging → balances</span>
+          <h3>Accumulating upsert, then atomic publish</h3>
+          <p>Each batch runs one <code>unnest</code> + <code>ON CONFLICT DO UPDATE</code> doing
+          <code>balance = balance + Δ</code> under a row lock — additive, concurrent, no lost
+          updates — into <strong>staging</strong>. A final single transaction swaps staging into
+          the live tables, so the server keeps serving a consistent snapshot during a reload.</p>
         </div>
       </div>
 
@@ -510,7 +513,17 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
         <span class="chip"><b>pool 16</b> · concurrent</span>
         <span class="chip"><b>atomic +=</b> · row lock</span>
         <span class="chip"><b>sorted ids</b> · no deadlock</span>
-        <span class="chip"><b>TRUNCATE first</b> · idempotent re-run</span>
+        <span class="chip"><b>atomic publish</b> · staging → live</span>
+        <span class="chip"><b>online reload</b> · serve while ingesting</span>
+      </div>
+
+      <div class="callout">
+        <span class="role">Found by running the real thing</span>
+        <p>A live "read while reloading" test caught a transient <code>0.00</code>: the swap first
+        used <code>TRUNCATE</code>, which is <em>not</em> MVCC-safe — a reader on an older snapshot
+        saw the table empty. Switching to <code>DELETE</code> (MVCC-safe, only
+        <code>ROW EXCLUSIVE</code>) fixed it, and a deterministic test now pins that an in-flight
+        reader never observes a partial swap.</p>
       </div>
     </section>
 
@@ -612,7 +625,7 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
           <span class="chip">FastAPI</span>
           <span class="chip">PostgreSQL 16</span>
           <span class="chip">Docker Compose</span>
-          <span class="chip">pytest · 20 tests</span>
+          <span class="chip">pytest · 23 tests</span>
         </div>
         <p style="margin-top:16px;">Source code · schema DDL · seeded generator · ingest→restart→serve test · concurrency &amp; performance notes — all five deliverables present.</p>
       </footer>

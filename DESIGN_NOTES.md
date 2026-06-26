@@ -1,12 +1,13 @@
 # Design Notes — Concurrency & Performance
 
 ## Concurrency safety (no lost updates)
-Balance accumulation happens **inside PostgreSQL**, never as an app-side read-modify-write:
+Balance accumulation happens **inside PostgreSQL**, never as an app-side read-modify-write.
+Ingestion accumulates into a staging table (see *Atomic publish* below):
 
-    INSERT INTO balances (id, name, balance_usd)
+    INSERT INTO balances_staging (id, name, balance_usd)
     SELECT * FROM unnest($1::int[], $2::text[], $3::numeric[])
     ON CONFLICT (id) DO UPDATE
-        SET balance_usd = balances.balance_usd + EXCLUDED.balance_usd;
+        SET balance_usd = balances_staging.balance_usd + EXCLUDED.balance_usd;
 
 Many batches run concurrently (asyncpg pool), and the same account id appears in many of them.
 For each conflicting row, `ON CONFLICT DO UPDATE` takes a row-level lock and performs the
@@ -25,6 +26,31 @@ for Y while B holds Y waiting for X). Each batch therefore sorts its ids ascendi
 concurrent statement acquires locks in the same order and no cycle can form.
 `tests/test_ingest.py::test_run_ingest_many_concurrent_batches_no_deadlock` exercises many
 concurrent multi-id batches (it deadlocked before this fix).
+
+## Atomic publish & online reload
+Ingestion writes **only** to staging tables. The live `balances` / `exchange_rates` are replaced
+in a single transaction at the very end:
+
+    BEGIN;
+    DELETE FROM balances;        INSERT INTO balances        SELECT * FROM balances_staging;
+    DELETE FROM exchange_rates;  INSERT INTO exchange_rates  SELECT * FROM exchange_rates_staging;
+    COMMIT;
+
+So the read server can keep serving **while an ingest runs**: a request sees either the old
+snapshot or the new one in full — never empty, partial, or a balance/rate mismatch. Two details
+make it airtight:
+
+- **`DELETE`, not `TRUNCATE`.** `TRUNCATE` is not MVCC-safe — a concurrent reader on an older
+  snapshot would see the table as *empty*. `DELETE` keeps the old rows visible to in-flight
+  snapshots and only takes `ROW EXCLUSIVE`, so reads are never blocked and never observe a partial
+  swap. `tests/test_ingest.py::test_publish_is_mvcc_safe_for_inflight_readers` pins this (it was
+  caught by a live read-during-reload test that saw a transient `0.00` with `TRUNCATE`).
+- **Snapshot reads.** Each endpoint reads the balance and the rate inside one `REPEATABLE READ`
+  transaction, so its two queries can't straddle a publish commit.
+
+Crash safety falls out for free: if ingestion dies before the publish commit, the live tables are
+untouched (`tests/test_ingest.py::test_failed_ingest_leaves_live_untouched`). Re-running is
+idempotent — staging is rebuilt each run.
 
 ## Performance
 - 50,000 single-row inserts collapse into a few hundred multi-row statements (batch size 5000,
@@ -48,6 +74,9 @@ behavior fully visible (which the assessment asks to be explained), avoids losin
 optimization, and keeps dependencies minimal.
 
 ## Restart isolation
-The read server creates its own pool on startup and reads only from PostgreSQL. The ingest
-process exits before it starts. `tests/test_end_to_end.py` runs ingestion as a subprocess, waits
-for it to exit, then serves and asserts — proving balances survive process termination.
+The read server creates its own pool on startup and reads only from PostgreSQL — it holds no
+in-memory state from ingestion. `tests/test_end_to_end.py` runs ingestion as a subprocess, waits
+for it to exit, then serves and asserts — proving balances survive process termination. Thanks to
+the atomic publish above, the server also does **not** have to be stopped for an ingest: it can
+stay up and serve a consistent snapshot throughout (the assessment's lifecycle of ingest-then-serve
+still works exactly as before; online reload is a superset).

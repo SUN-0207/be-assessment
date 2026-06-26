@@ -21,4 +21,10 @@ async def apply_schema(conn) -> None:
 
 
 async def truncate_all(conn) -> None:
-    await conn.execute("TRUNCATE balances, exchange_rates;")
+    await conn.execute(
+        "TRUNCATE balances, exchange_rates, balances_staging, exchange_rates_staging;"
+    )
+
+
+async def truncate_staging(conn) -> None:
+    await conn.execute("TRUNCATE balances_staging, exchange_rates_staging;")
