@@ -16,7 +16,7 @@ MAX_DATE_RATE_SQL = (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.pool = await create_pool()
-    app.state._pool_loop = asyncio.get_event_loop()
+    app.state._pool_loop = asyncio.get_running_loop()
     try:
         yield
     finally:
@@ -29,7 +29,7 @@ app = FastAPI(lifespan=lifespan)
 
 async def _get_pool():
     """Return app.state.pool, initialising lazily if lifespan did not fire (e.g. tests)."""
-    current_loop = asyncio.get_event_loop()
+    current_loop = asyncio.get_running_loop()
     pool = getattr(app.state, "pool", None)
     pool_loop = getattr(app.state, "_pool_loop", None)
     if pool is None or pool_loop is not current_loop:
