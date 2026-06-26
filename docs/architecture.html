@@ -154,30 +154,34 @@
   }
   a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--pg); outline-offset: 3px; border-radius: 4px; }
 
-  /* ---- architecture flow (redrawn) ---- */
-  .flow-rail { overflow-x: auto; padding-bottom: 10px; }
-  .flow { display: flex; align-items: stretch; gap: 0; min-width: 940px; }
+  /* ---- architecture flow ---- */
+  .flow-rail { overflow-x: auto; padding: 4px 2px 12px; }
+  .flow { display: flex; align-items: stretch; gap: 0; min-width: 900px; }
   .fnode {
     flex: 1 1 0; background: var(--surface); border: 1px solid var(--hair-strong);
-    border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
-    box-shadow: 0 1px 0 rgba(15,26,38,0.04), 0 14px 30px -26px rgba(15,26,38,0.5);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 1px 2px rgba(15,26,38,0.04), 0 18px 36px -28px rgba(15,26,38,0.5);
   }
-  .fnode .role { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-  .fnode h3 { font-size: 1.05rem; }
-  .fnode.proc { border-top: 3px solid var(--amber); }
-  .fnode.proc.b { border-top-color: var(--pg); }
-  .fnode.store { border-top: 3px solid var(--pg); background: linear-gradient(180deg, var(--pg-soft), var(--surface) 55%); }
-  .fnode.inputs, .fnode.client { background: var(--surface-2); border-style: dashed; }
-  .filechip { font-family: var(--mono); font-size: 0.78rem; background: var(--surface); border: 1px solid var(--hair-strong); border-radius: 8px; padding: 7px 10px; display: flex; flex-direction: column; gap: 1px; }
-  .filechip .meta { color: var(--muted); font-size: 0.67rem; }
-  .tablechip { font-family: var(--mono); font-size: 0.8rem; background: #fff; border: 1px solid #cdd9e8; border-radius: 8px; padding: 7px 10px; color: var(--pg); display: flex; flex-direction: column; gap: 1px; }
-  .tablechip .meta { color: var(--muted); font-size: 0.66rem; font-family: var(--sans); }
-  .ministeps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; }
-  .ministeps span { font-family: var(--mono); font-size: 0.65rem; background: var(--amber-soft); color: var(--amber); border-radius: 6px; padding: 3px 7px; }
-  .fnode.proc.b .ministeps span { background: var(--pg-soft); color: var(--pg); }
-  .farrow { flex: 0 0 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; }
-  .farrow .lbl { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); text-align: center; }
-  .farrow svg { width: 100%; height: 20px; }
+  .fnode-head { padding: 15px 16px 13px; border-top: 3px solid var(--hair-strong); display: flex; flex-direction: column; gap: 7px; }
+  .fnode.proc   .fnode-head { border-top-color: var(--amber); }
+  .fnode.proc.b .fnode-head { border-top-color: var(--pg); }
+  .fnode.store  .fnode-head { border-top-color: var(--pg); background: var(--pg-soft); }
+  .fnode.ext { border-style: dashed; background: var(--surface-2); }
+  .fnode .role { font-family: var(--mono); font-size: 0.63rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+  .fnode h3 { font-size: 1.05rem; letter-spacing: -0.01em; }
+  .fnode-body { flex: 1; padding: 13px 16px 15px; border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 8px; }
+  .row { font-family: var(--mono); font-size: 0.77rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--hair); border-radius: 9px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .row .sub { font-size: 0.65rem; color: var(--muted); }
+  .fnode.store .row { background: #fff; border-color: #cdd9e8; color: var(--pg); }
+  .fnode.store .row .sub { color: var(--muted); }
+  .seq { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seq span { font-family: var(--mono); font-size: 0.68rem; background: var(--amber-soft); color: var(--amber); border-radius: 7px; padding: 4px 8px; }
+  .pill { align-self: flex-start; font-family: var(--mono); font-size: 0.63rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  .pill.exit { background: #fbe9e7; color: var(--debit); }
+  .pill.live { background: #e4f3ec; color: var(--credit); }
+  .farrow { flex: 0 0 86px; align-self: center; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 0 6px; }
+  .farrow .lbl { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); text-align: center; line-height: 1.35; }
+  .farrow svg { width: 100%; height: 16px; }
   .farrow.amber { color: var(--amber); }
   .farrow.blue { color: var(--pg); }
 
@@ -229,45 +233,39 @@
 
       <div class="flow-rail">
         <div class="flow">
-          <div class="fnode inputs">
-            <span class="role">Input files</span>
-            <div class="filechip">transactions.csv<span class="meta">50,000 rows</span></div>
-            <div class="filechip">rates.csv<span class="meta">currency × date grid</span></div>
+          <div class="fnode ext">
+            <div class="fnode-head"><span class="role">Input</span><h3>CSV files</h3></div>
+            <div class="fnode-body">
+              <div class="row">transactions.csv<span class="sub">50,000 rows</span></div>
+              <div class="row">rates.csv<span class="sub">currency × date grid</span></div>
+            </div>
           </div>
 
-          <div class="farrow amber"><span class="lbl">feeds</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+          <div class="farrow amber"><span class="lbl">feeds</span><svg viewBox="0 0 86 16" fill="none"><line x1="2" y1="8" x2="74" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M70 3l10 5-10 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 
           <div class="fnode proc">
-            <span class="role">Process A · batch</span>
-            <h3>Ingest</h3>
-            <span class="pill exit">runs → exits</span>
-            <div class="ministeps"><span>parse</span><span>convert</span><span>batch</span><span>upsert</span></div>
+            <div class="fnode-head"><span class="role">Process A · batch</span><h3>Ingest</h3><span class="pill exit">runs → exits</span></div>
+            <div class="fnode-body"><div class="seq"><span>parse</span><span>convert</span><span>batch</span><span>upsert</span></div></div>
           </div>
 
-          <div class="farrow amber"><span class="lbl">writes</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+          <div class="farrow amber"><span class="lbl">writes<br>balances + rates</span><svg viewBox="0 0 86 16" fill="none"><line x1="2" y1="8" x2="74" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M70 3l10 5-10 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 
           <div class="fnode store">
-            <span class="role">Source of truth</span>
-            <h3>PostgreSQL 16</h3>
-            <div class="tablechip">balances<span class="meta">one row per id · NUMERIC(38,10)</span></div>
-            <div class="tablechip">exchange_rates<span class="meta">(rate_date, currency)</span></div>
+            <div class="fnode-head"><span class="role">Source of truth</span><h3>PostgreSQL 16</h3></div>
+            <div class="fnode-body">
+              <div class="row">balances<span class="sub">one row / id · NUMERIC(38,10)</span></div>
+              <div class="row">exchange_rates<span class="sub">(rate_date, currency)</span></div>
+            </div>
           </div>
 
-          <div class="farrow blue"><span class="lbl">reads</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
+          <div class="farrow blue"><span class="lbl">reads</span><svg viewBox="0 0 86 16" fill="none"><line x1="12" y1="8" x2="84" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 3l-10 5 10 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 
           <div class="fnode proc b">
-            <span class="role">Process B · server</span>
-            <h3>Read server</h3>
-            <span class="pill live">separate run</span>
-            <div class="ministeps"><span>GET /balance/{id}</span><span>GET /total</span></div>
-          </div>
-
-          <div class="farrow blue"><span class="lbl">HTTP · JSON</span><svg viewBox="0 0 70 20" fill="none"><path d="M2 10H58" stroke="currentColor" stroke-width="2"/><path d="M54 4l10 6-10 6" stroke="currentColor" stroke-width="2" fill="none"/></svg></div>
-
-          <div class="fnode client">
-            <span class="role">Client</span>
-            <h3>curl / app</h3>
-            <div class="filechip">balance as string<span class="meta">in any currency</span></div>
+            <div class="fnode-head"><span class="role">Process B · server</span><h3>Read server</h3><span class="pill live">separate run</span></div>
+            <div class="fnode-body">
+              <div class="row">GET /balance/{id}</div>
+              <div class="row">GET /total</div>
+            </div>
           </div>
         </div>
       </div>
