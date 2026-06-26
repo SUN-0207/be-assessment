@@ -315,11 +315,10 @@
       <p class="lede">A two-process service: one run ingests 50,000 financial transactions into PostgreSQL with concurrency-safe accumulation, then exits; a separate read server serves per-account and total balances in any currency — reading only from the database.</p>
       <div class="stats" role="list">
         <div class="stat" role="listitem"><div class="v num">50,000</div><div class="k">transactions</div></div>
-        <div class="stat" role="listitem"><div class="v num">1.15s</div><div class="k">ingest time</div></div>
-        <div class="stat" role="listitem"><div class="v num">900</div><div class="k">accounts</div></div>
+        <div class="stat" role="listitem"><div class="v num">~900</div><div class="k">accounts</div></div>
         <div class="stat" role="listitem"><div class="v num">5</div><div class="k">currencies</div></div>
-        <div class="stat good" role="listitem"><div class="v num">23/23</div><div class="k">tests green</div></div>
-        <div class="stat good" role="listitem"><div class="v">served = ref</div><div class="k">cross-checked</div></div>
+        <div class="stat" role="listitem"><div class="v num">≤10</div><div class="k">dates</div></div>
+        <div class="stat" role="listitem"><div class="v num">2</div><div class="k">processes</div></div>
       </div>
     </header>
 
@@ -516,15 +515,6 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
         <span class="chip"><b>atomic publish</b> · staging → live</span>
         <span class="chip"><b>online reload</b> · serve while ingesting</span>
       </div>
-
-      <div class="callout">
-        <span class="role">Found by running the real thing</span>
-        <p>A live "read while reloading" test caught a transient <code>0.00</code>: the swap first
-        used <code>TRUNCATE</code>, which is <em>not</em> MVCC-safe — a reader on an older snapshot
-        saw the table empty. Switching to <code>DELETE</code> (MVCC-safe, only
-        <code>ROW EXCLUSIVE</code>) fixed it, and a deterministic test now pins that an in-flight
-        reader never observes a partial swap.</p>
-      </div>
     </section>
 
     <!-- CONCURRENCY -->
@@ -554,11 +544,6 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
           <p>Every batch sorts its ids ascending, so concurrent statements acquire locks in the same order and can't form a deadlock cycle.</p>
         </div>
       </div>
-
-      <div class="callout">
-        <span class="role">Found by running the real thing</span>
-        <p>Item <b>C</b> came from running the full 50k ingest live: it threw <code>DeadlockDetectedError</code> because batches updated overlapping ids in different orders. The narrow unit test (50 writes to a single id) and the small end-to-end test (one batch) never surfaced it. Sorting ids fixed it, with a multi-batch regression test that reproduces the original deadlock.</p>
-      </div>
     </section>
 
     <!-- CURRENCY -->
@@ -583,51 +568,17 @@ balances[<span class="fn">100</span>].balance_usd += <span class="lit">129.50</s
       </div>
     </section>
 
-    <!-- VERIFICATION -->
+    <!-- STACK -->
     <section style="border-bottom:none;">
-      <div class="sec-head">
-        <span class="eyebrow">Verification</span>
-        <h2>Live results vs an independent reference</h2>
-        <p>The read server was started as a separate process and queried over HTTP. Every value is compared against a pure-Python reference computed inline from the CSVs — sharing no code with the ingest path.</p>
-      </div>
-
-      <div class="scroll">
-        <table>
-          <caption>Served by the API vs independently recomputed. Valuation date 2026-06-24, EUR rate 1.092949.</caption>
-          <thead>
-            <tr><th>Query</th><th>Served (USD)</th><th>Served (EUR)</th><th>Reference</th><th>Result</th></tr>
-          </thead>
-          <tbody>
-            <tr><td class="mono">balance/100</td><td class="served pos">13,309.40</td><td class="served pos">12,177.51</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
-            <tr><td class="mono">balance/101</td><td class="served neg">−8,001.32</td><td class="served neg">−7,320.85</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
-            <tr><td class="mono">balance/102</td><td class="served pos">8,931.31</td><td class="served pos">8,171.76</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
-            <tr><td class="mono">balance/103</td><td class="served neg">−9,337.48</td><td class="served neg">−8,543.38</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
-            <tr><td class="mono">balance/1000</td><td class="served" colspan="2" style="text-align:center; color:var(--muted);">absent → HTTP 404</td><td class="ref">expected 404</td><td><span class="ok">OK</span></td></tr>
-            <tr class="total"><td class="mono">total</td><td class="served neg">−226,328.98</td><td class="served neg">−207,081.01</td><td class="ref">matches both</td><td><span class="ok">OK</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="verdict">ALL MATCH — served output equals the independent reference</div>
-
-      <div class="perf">
-        <div class="p"><div class="v num">0.42s</div><div class="k">generate 50k rows</div></div>
-        <div class="p"><div class="v num">1.15s</div><div class="k">ingest + persist</div></div>
-        <div class="p"><div class="v num">900</div><div class="k">balance rows</div></div>
-        <div class="p"><div class="v num">−226,328.98</div><div class="k">total USD</div></div>
-      </div>
-
       <footer>
-        <span class="eyebrow" style="color:var(--pg);">Stack &amp; deliverables</span>
+        <span class="eyebrow" style="color:var(--pg);">Stack</span>
         <div class="stack">
           <span class="chip">Python 3.14</span>
           <span class="chip">asyncpg · raw SQL</span>
           <span class="chip">FastAPI</span>
           <span class="chip">PostgreSQL 16</span>
           <span class="chip">Docker Compose</span>
-          <span class="chip">pytest · 23 tests</span>
         </div>
-        <p style="margin-top:16px;">Source code · schema DDL · seeded generator · ingest→restart→serve test · concurrency &amp; performance notes — all five deliverables present.</p>
       </footer>
     </section>
 
